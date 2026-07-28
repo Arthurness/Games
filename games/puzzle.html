@@ -1,128 +1,314 @@
-@property --halftone-intensity {
-syntax: '<number>';
-  inherits: false;
-  initial-value: 1;
-  }
-
-  <div id="preview-container">
-    <img src="https://assets.codepen.io/453571/halloween-pumpkins-smiling.avif" id="preview-image" alt="Puzzle Preview" crossorigin />
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Pong (1-Player, Mobile-Friendly)</title>
+  <style>
+    :root { --bg:#0b0f13; --fg:#e7f2ff; --accent:#53b3ff; }
+    *{box-sizing:border-box}
+    html,body{
+      height:100%; margin:0; background:var(--bg); color:var(--fg);
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,Arial;
+      overscroll-behavior:none; /* prevent page bounce/scroll chaining */
+    }
+    .wrap{display:grid;place-items:center;min-height:100dvh;padding:12px}
+    .hud{position:fixed;inset:12px auto auto 12px;display:flex;gap:8px;align-items:center;z-index:2}
+    .btn{background:#12171e;color:var(--fg);border:1px solid #1d2631;padding:8px 12px;border-radius:12px;cursor:pointer}
+    .btn:hover{border-color:#2a3a4c}
+    canvas{
+      display:block;border-radius:18px;
+      background:radial-gradient(140% 90% at 50% 0%,#0f1620 0%,#0b0f13 60%);
+      box-shadow:0 10px 30px rgba(0,0,0,.4),0 0 0 1px rgba(83,179,255,.06) inset;
+      /* ==== added to stop dragging/selection on mobile ==== */
+      touch-action:none;            /* disable native panning/zoom on element */
+      -webkit-user-select:none; user-select:none;
+      -webkit-touch-callout:none;   /* disable long-press menu on iOS */
+    }
+    .hint{position:fixed;left:50%;bottom:10px;transform:translateX(-50%);opacity:.25;font-size:12px;pointer-events:none}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <canvas id="game" aria-label="Pong game area"></canvas>
   </div>
+  <div class="hud">
+    <button class="btn" id="resetBtn" title="Reset level">Reset</button>
+  </div>
+  <div class="hint">Drag or move your thumb to control the bottom paddle</div>
 
-  <input type="checkbox" name="view-reference" id="view-reference">
-  <label for="view-reference" class="cheat_reveal" tabindex="1">
-    <div class="view-reference_txt">Reveal the reference</div>
-  </label>
+  <script>
+  (function(){
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
 
-  <!-- filter -->
-  <svg class="svg-half-tone-dots" x="0" y="0" width="0" height="0" focusable="false" aria-hidden="hidden" inert="" style="position:absolute; pointer-events:none;">
-    <defs>
-      <style>
-        :has(:where(img:hover, #view-reference:checked)) {
-          --reveal: black
+    // Fixed world (portrait). We scale canvas to fit viewport while keeping these units.
+    const WORLD_W = 540, WORLD_H = 900;
+    let dpr = Math.max(1, window.devicePixelRatio || 1);
+
+    function resize(){
+      dpr = Math.max(1, window.devicePixelRatio || 1);
+      const scale = Math.min(window.innerWidth / WORLD_W, window.innerHeight / WORLD_H);
+      const cssW = Math.max(240, Math.floor(WORLD_W * scale));
+      const cssH = Math.max(360, Math.floor(WORLD_H * scale));
+      canvas.style.width = cssW + 'px';
+      canvas.style.height = cssH + 'px';
+      canvas.width = Math.floor(WORLD_W * dpr);
+      canvas.height = Math.floor(WORLD_H * dpr);
+      ctx.setTransform(dpr,0,0,dpr,0,0); // world units
+    }
+    window.addEventListener('resize', resize, {passive:true});
+
+    const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
+
+    // Horizontal paddles (top CPU, bottom Player)
+    const PADDLE_W = 140, PADDLE_H = 14;
+    class Paddle {
+      constructor(y, isAI=false){
+        this.x = (WORLD_W - PADDLE_W)/2; this.y = y; this.w = PADDLE_W; this.h = PADDLE_H; this.isAI = isAI; this.speed = 320;
+        this.targetOffset = 0; // applied when ball heads toward this paddle
+        this.nextTargetOffset = 0; // planned after each CPU hit
+      }
+      setCenterX(cx){ this.x = clamp(cx - this.w/2, 0, WORLD_W - this.w); }
+      planNextOffset(){
+        // Aim to hit a side for a spicy angle next time the ball comes up.
+        const relMag = 0.45 + Math.random()*0.35; // 0.45..0.80 of half-width
+        const sign = Math.random() < 0.5 ? -1 : 1; // -1=left side, +1=right side
+        // To achieve a desired relative impact rel, paddle center = ball.x - rel*(w/2)
+        // So targetOffset (added to ball.x) should be -rel*(w/2)
+        this.nextTargetOffset = -sign * relMag * (this.w/2);
+      }
+      update(dt, ball){
+        if(!this.isAI) return; // AI moves only for top paddle
+        const incoming = ball.vy < 0; // ball moving toward top
+        const desiredCenter = incoming ? (ball.x + this.targetOffset) : (WORLD_W/2);
+        const dx = desiredCenter - (this.x + this.w/2);
+        const maxMove = this.speed * dt;
+        const step = clamp(dx, -maxMove, maxMove);
+        this.setCenterX(this.x + this.w/2 + step);
+      }
+      draw(){ ctx.fillStyle = '#e7f2ff'; ctx.fillRect(this.x, this.y, this.w, this.h); }
+    }
+
+    // Ball: uses angle from vertical; speed multiplies slightly on each paddle hit
+    const BALL_R = 9, BALL_ACCEL_HIT = 1.12, BALL_SPEED_MAX = 1400, MAX_BOUNCE_DEG = 60 * Math.PI/180;
+    class Ball {
+      constructor(){ this.reset(-1, 400); }
+      reset(dirUp, speed){
+        this.x = WORLD_W/2; this.y = WORLD_H*0.72; // start closer to player
+        const angleFromVertical = (Math.random()*0.6 - 0.3); // ~±17°
+        const s = speed;
+        this.vx = Math.sin(angleFromVertical) * s; // horizontal component (sign follows angle)
+        this.vy = -Math.cos(angleFromVertical) * s * (dirUp < 0 ? 1 : -1); // negative = up first
+      }
+      speed(){ return Math.hypot(this.vx, this.vy); }
+      setSpeedDir(angleFromVertical, goingUp){
+        const s = clamp(this.speed()*BALL_ACCEL_HIT, 180, BALL_SPEED_MAX);
+        // vx sign follows angle sign so hitting right side sends ball right
+        this.vx = Math.sin(angleFromVertical) * s;
+        this.vy = (goingUp ? -1 : 1) * Math.cos(angleFromVertical) * s;
+      }
+      update(dt, top, bottom){
+        this.x += this.vx * dt; this.y += this.vy * dt;
+        // Left/right walls
+        if(this.x - BALL_R <= 0 && this.vx < 0){ this.x = BALL_R; this.vx *= -1; }
+        if(this.x + BALL_R >= WORLD_W && this.vx > 0){ this.x = WORLD_W - BALL_R; this.vx *= -1; }
+
+        // Top paddle collision OR immediate miss at first contact line
+        if(this.vy < 0 && this.y - BALL_R <= top.y + top.h){
+          const overlap = (this.x >= top.x - BALL_R && this.x <= top.x + top.w + BALL_R);
+          if(overlap){
+            const rel = (this.x - (top.x + top.w/2)) / (top.w/2);
+            const angle = clamp(rel, -1, 1) * MAX_BOUNCE_DEG;
+            this.setSpeedDir(angle, false); // go down
+            this.y = top.y + top.h + BALL_R + 0.1;
+            hits++;
+            top.planNextOffset(); // choose next spicy offset for the AI
+          } else {
+            onCpuMiss();
+            return; // stop further processing this frame
+          }
         }
-      </style>
-      <!-- Circles from r=0.25 to r=2 -->
-      <circle id="dot1" cx="2" cy="2" r="0.25"></circle>
-      <circle id="dot2" cx="2" cy="2" r="0.5"></circle>
-      <circle id="dot3" cx="2" cy="2" r="0.75"></circle>
-      <circle id="dot4" cx="2" cy="2" r="1"></circle>
-      <circle id="dot5" cx="2" cy="2" r="1.25"></circle>
-      <circle id="dot6" cx="2" cy="2" r="1.5"></circle>
-      <circle id="dot7" cx="2" cy="2" r="1.75"></circle>
-      <circle id="dot8" cx="2" cy="2" r="2"></circle>
+        // Bottom paddle collision OR immediate miss at first contact line
+        if(this.vy > 0 && this.y + BALL_R >= bottom.y){
+          const overlap = (this.x >= bottom.x - BALL_R && this.x <= bottom.x + bottom.w + BALL_R);
+          if(overlap){
+            const rel = (this.x - (bottom.x + bottom.w/2)) / (bottom.w/2);
+            const angle = clamp(rel, -1, 1) * MAX_BOUNCE_DEG;
+            this.setSpeedDir(angle, true); // go up
+            this.y = bottom.y - BALL_R - 0.1;
+            hits++;
+          } else {
+            onPlayerMiss();
+            return;
+          }
+        }
+      }
+      draw(){
+        ctx.beginPath(); ctx.arc(this.x, this.y, BALL_R, 0, Math.PI*2);
+        ctx.fillStyle = '#53b3ff'; ctx.shadowColor = '#53b3ff'; ctx.shadowBlur = 10; ctx.fill(); ctx.shadowBlur = 0;
+      }
+    }
 
-      <filter id="half-tone-filter" color-interpolation-filters="sRGB" primitiveUnits="userSpaceOnUse">
-        <!-- Tiled circles -->
-        <feImage width="4" height="4" xlink:href="#dot1"></feImage>
-        <feTile result="dot1-tile"></feTile>
-        <feImage width="4" height="4" xlink:href="#dot2"></feImage>
-        <feTile result="dot2-tile"></feTile>
-        <feImage width="4" height="4" xlink:href="#dot3"></feImage>
-        <feTile result="dot3-tile"></feTile>
-        <feImage width="4" height="4" xlink:href="#dot4"></feImage>
-        <feTile result="dot4-tile"></feTile>
-        <feImage width="4" height="4" xlink:href="#dot5"></feImage>
-        <feTile result="dot5-tile"></feTile>
-        <feImage width="4" height="4" xlink:href="#dot6"></feImage>
-        <feTile result="dot6-tile"></feTile>
-        <feImage width="4" height="4" xlink:href="#dot7"></feImage>
-        <feTile result="dot7-tile"></feTile>
-        <feImage width="4" height="4" xlink:href="#dot8"></feImage>
-        <feTile result="dot8-tile"></feTile>
+    // Game state
+    const top = new Paddle(40, true);
+    const bottom = new Paddle(WORLD_H - 40 - PADDLE_H, false);
+    const ball = new Ball();
+    let last = performance.now();
+    let level = 0; // displayed as 00, 01, ...
+    let hits = 0;
 
-        <!-- Luminance mapping -->
-        <feColorMatrix in="SourceGraphic" type="luminanceToAlpha" result="lum"></feColorMatrix>
-        <feComponentTransfer in="lum" result="lum-map">
-          <feFuncA type="table" tableValues="1 0"></feFuncA>
-        </feComponentTransfer>
+    function levelSpeeds(lv){
+      // 5× faster difficulty ramp: map newLevel -> oldLevel*5
+      const scaled = lv * 5;
+      const baseBall = 360 * Math.pow(1.06, scaled);  // ball speed growth
+      const ai       = 320 * Math.pow(1.03, scaled);  // CPU paddle speed growth
+      return { baseBall, ai };
+    }
 
-        <!-- Discrete thresholds -->
-        <feComponentTransfer in="lum-map" result="thresh1">
-          <feFuncA type="discrete" tableValues="1 0 0 0 0 0 0 0"></feFuncA>
-        </feComponentTransfer>
-        <feComponentTransfer in="lum-map" result="thresh2">
-          <feFuncA type="discrete" tableValues="0 1 0 0 0 0 0 0"></feFuncA>
-        </feComponentTransfer>
-        <feComponentTransfer in="lum-map" result="thresh3">
-          <feFuncA type="discrete" tableValues="0 0 1 0 0 0 0 0"></feFuncA>
-        </feComponentTransfer>
-        <feComponentTransfer in="lum-map" result="thresh4">
-          <feFuncA type="discrete" tableValues="0 0 0 1 0 0 0 0"></feFuncA>
-        </feComponentTransfer>
-        <feComponentTransfer in="lum-map" result="thresh5">
-          <feFuncA type="discrete" tableValues="0 0 0 0 1 0 0 0"></feFuncA>
-        </feComponentTransfer>
-        <feComponentTransfer in="lum-map" result="thresh6">
-          <feFuncA type="discrete" tableValues="0 0 0 0 0 1 0 0"></feFuncA>
-        </feComponentTransfer>
-        <feComponentTransfer in="lum-map" result="thresh7">
-          <feFuncA type="discrete" tableValues="0 0 0 0 0 0 1 0"></feFuncA>
-        </feComponentTransfer>
-        <feComponentTransfer in="lum-map" result="thresh8">
-          <feFuncA type="discrete" tableValues="0 0 0 0 0 0 0 1"></feFuncA>
-        </feComponentTransfer>
+    function startLevel(){
+      hits = 0;
+      const { baseBall, ai } = levelSpeeds(level);
+      top.speed = ai;
+      top.planNextOffset(); // plan the first offset for when ball returns up next time
+      applyLevelTheme(level);          // subtle per-level background
+      ball.reset(-1, baseBall);        // serve upward to CPU first
+      // center paddles
+      top.setCenterX(WORLD_W/2);
+      bottom.setCenterX(WORLD_W/2);
+      prevHeadingUp = (ball.vy < 0);
+      // If ball is heading up now, arm current offset
+      top.targetOffset = prevHeadingUp ? top.nextTargetOffset : 0;
+    }
 
-        <!-- Combine dots with thresholds -->
-        <feComposite in="thresh1" in2="dot1-tile" operator="in" result="level1"></feComposite>
-        <feComposite in="thresh2" in2="dot2-tile" operator="in" result="level2"></feComposite>
-        <feComposite in="thresh3" in2="dot3-tile" operator="in" result="level3"></feComposite>
-        <feComposite in="thresh4" in2="dot4-tile" operator="in" result="level4"></feComposite>
-        <feComposite in="thresh5" in2="dot5-tile" operator="in" result="level5"></feComposite>
-        <feComposite in="thresh6" in2="dot6-tile" operator="in" result="level6"></feComposite>
-        <feComposite in="thresh7" in2="dot7-tile" operator="in" result="level7"></feComposite>
-        <feComposite in="thresh8" in2="dot8-tile" operator="in" result="level8"></feComposite>
+    // Overlay flash handling
+    let overlayActive = false, overlayEnd = 0, overlayBg = '#fff', overlayFg = '#000', overlayText = '', afterOverlay = null;
+    const FLASH_MS = 400;
+    function flash(bg, fg, text, after){
+      overlayActive = true; overlayEnd = performance.now() + FLASH_MS; overlayBg = bg; overlayFg = fg; overlayText = text; afterOverlay = after;
+    }
 
-        <!-- Merge everything -->
-        <feMerge result="merged">
-          <feMergeNode in="level8"></feMergeNode>
-          <feMergeNode in="level7"></feMergeNode>
-          <feMergeNode in="level6"></feMergeNode>
-          <feMergeNode in="level5"></feMergeNode>
-          <feMergeNode in="level4"></feMergeNode>
-          <feMergeNode in="level3"></feMergeNode>
-          <feMergeNode in="level2"></feMergeNode>
-          <feMergeNode in="level1"></feMergeNode>
-        </feMerge>
+    function onCpuMiss(){
+      flash('#ffffff', '#000000', 'SCORE!!', ()=>{ level++; startLevel(); });
+    }
+    function onPlayerMiss(){
+      flash('#d32626', '#ffffff', 'TRY AGAIN!', ()=>{ startLevel(); });
+    }
 
-        <!-- Clip to original shape -->
-        <feComposite in="merged" in2="SourceGraphic" operator="in" result="masked"></feComposite>
+    // Input: mouse/touch/pointer — snap paddle X immediately to pointer
+    function pointerToWorldX(e){
+      const rect = canvas.getBoundingClientRect();
+      const x = (e.clientX - rect.left) * (WORLD_W / rect.width);
+      return clamp(x, 0, WORLD_W);
+    }
+    function handlePointer(e){ bottom.setCenterX(pointerToWorldX(e)); }
 
-        <!-- Apply color (optional) -->
-        <feFlood id="floodHd" flood-color="light-dark(var(--reveal,white),white)" result="color"></feFlood>
-        <feComposite in="color" in2="masked" operator="in" result="finalHalftone"></feComposite>
+    // ==== updated listeners to prevent page dragging ====
+    canvas.addEventListener('pointerdown', (e)=>{
+      e.preventDefault();
+      canvas.setPointerCapture?.(e.pointerId);
+      handlePointer(e);
+    }, { passive:false });
 
-        <!-- Control the opacity of the halftone pattern using a CSS variable -->
-        <!-- Control the opacity of the halftone pattern using a CSS variable -->
-        <feComponentTransfer in="finalHalftone" result="fadedHalftone">
-          <feFuncA type="linear" slope="var(--halftone-intensity, 1)" />
-        </feComponentTransfer>
+    canvas.addEventListener('pointermove', (e)=>{
+      e.preventDefault();
+      handlePointer(e);
+    }, { passive:false });
+    // ====================================================
 
-        <!-- Place the original image on the bottom and the faded halftone on top -->
-        <feMerge>
-          <feMergeNode in="SourceGraphic" />
-          <feMergeNode in="fadedHalftone" />
-        </feMerge>
+    // Also allow keyboard (optional)
+    const keys = new Set();
+    window.addEventListener('keydown', e=>{ keys.add(e.code); });
+    window.addEventListener('keyup', e=>{ keys.delete(e.code); });
 
-      </filter>
-    </defs>
-  </svg>
+    let prevHeadingUp = false;
+    function update(dt){
+      // Optional keyboard adjust
+      let dx = 0; if(keys.has('ArrowLeft')) dx -= 520; if(keys.has('ArrowRight')) dx += 520;
+      if(dx) bottom.setCenterX(bottom.x + bottom.w/2 + dx*dt);
+
+      // Track ball direction changes to arm AI offset when ball heads upward
+      const headingUp = ball.vy < 0;
+      if(headingUp && !prevHeadingUp){
+        top.targetOffset = top.nextTargetOffset || 0; // arm offset for this incoming volley
+      }
+      if(!headingUp && prevHeadingUp){
+        // Heading down toward player; clear immediate offset influence
+        // (AI will drift toward center in update())
+      }
+      prevHeadingUp = headingUp;
+
+      top.update(dt, ball);
+      ball.update(dt, top, bottom);
+    }
+
+    function drawCourt(){
+      // Midline (subtle)
+      ctx.save(); ctx.setLineDash([8,12]); ctx.strokeStyle = 'rgba(231,242,255,0.28)'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(0, WORLD_H/2); ctx.lineTo(WORLD_W, WORLD_H/2); ctx.stroke(); ctx.restore();
+      // Level label
+      ctx.fillStyle = 'rgba(231,242,255,0.95)';
+      ctx.font = 'bold 40px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      const label = 'LEVEL ' + String(level).padStart(2,'0');
+      ctx.fillText(label, WORLD_W/2, WORLD_H/2);
+    }
+
+    function drawOverlay(){
+      ctx.save();
+      ctx.globalAlpha = 0.92; ctx.fillStyle = overlayBg; ctx.fillRect(0,0,WORLD_W,WORLD_H); ctx.globalAlpha = 1;
+      ctx.fillStyle = overlayFg; ctx.font = 'bold 64px ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(overlayText, WORLD_W/2, WORLD_H/2);
+      ctx.restore();
+    }
+
+    // Level background theme per level (cycle every 10)
+    function applyLevelTheme(lv){
+      const idx = ((lv % 10) + 10) % 10; // 0..9
+      // 0 same as now, 1 pink, 2 purple, 3 blue, 4 cyan, 5 green,
+      // 6 green-yellow, 7 yellow, 8 orange, 9 red
+      const hues = [220, 340, 275, 220, 195, 140, 90, 60, 30, 10];
+      const h = hues[idx];
+      const s = 40;    // very desaturated
+      const topL = 20; // subtle radial top
+      const baseL = 10; // dark base, not black
+      const top  = `hsl(${h} ${s}% ${topL}%)`;
+      const base = `hsl(${h} ${s}% ${baseL}%)`;
+      canvas.style.background = `radial-gradient(140% 140% at 50% 100%, ${top} 0%, ${base} 60%)`;
+    }
+
+    function loop(t){
+      const now = t || performance.now();
+      const dt = Math.min(0.03, (now - last)/1000); last = now;
+
+      if(!overlayActive){
+        update(dt);
+      }
+
+      ctx.clearRect(0,0,WORLD_W,WORLD_H);
+      drawCourt();
+      top.draw(); bottom.draw(); ball.draw();
+
+      if(overlayActive){
+        drawOverlay();
+        if(now >= overlayEnd){
+          overlayActive = false; const fn = afterOverlay; afterOverlay = null; if(fn) fn();
+        }
+      }
+
+      requestAnimationFrame(loop);
+    }
+
+    // Reset button
+    document.getElementById('resetBtn').addEventListener('click', ()=>{ level = 0; overlayActive=false; startLevel(); });
+
+    // Initialize
+    resize(); startLevel();
+    requestAnimationFrame((t)=>{ last = t; loop(t); });
+
+    // Keep crisp when DPR changes
+    matchMedia(`(resolution: ${dpr}dppx)`).addEventListener?.('change', resize);
+  })();
+  </script>
+</body>
+</html>
