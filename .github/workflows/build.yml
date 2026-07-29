@@ -1,0 +1,108 @@
+name: Auto Generate Arcade Menu
+
+on:
+  push:
+    paths:
+      - 'games/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  generate-menu:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Auto Scan and Build HTML
+        run: |
+          cat << 'EOF' > index.html
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>My Automated Arcade</title>
+              <style>
+                  body {
+                      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+                      background-color: #0f172a;
+                      color: #f8fafc;
+                      margin: 0;
+                      display: flex;
+                      flex-direction: column;
+                      align-items: center;
+                      justify-content: center;
+                      min-height: 100vh;
+                  }
+                  header { text-align: center; margin-bottom: 40px; }
+                  h1 {
+                      font-size: 2.5rem;
+                      margin-bottom: 10px;
+                      background: linear-gradient(to right, #38bdf8, #a855f7, #ec4899);
+                      -webkit-background-clip: text;
+                      -webkit-text-fill-color: transparent;
+                  }
+                  p { color: #94a3b8; font-size: 1.1rem; margin: 0; }
+                  .menu-container {
+                      display: grid;
+                      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                      gap: 20px;
+                      width: 90%;
+                      max-width: 1000px;
+                      justify-content: center;
+                  }
+                  .play-btn {
+                      text-align: center;
+                      text-decoration: none;
+                      padding: 25px 20px;
+                      border-radius: 12px;
+                      font-size: 1.2rem;
+                      font-weight: bold;
+                      color: #ffffff;
+                      background-color: #1e293b;
+                      border: 2px solid #334155;
+                      transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s;
+                      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+                      text-transform: capitalize;
+                  }
+                  .play-btn:hover {
+                      transform: translateY(-4px);
+                      border-color: #a855f7;
+                      box-shadow: 0 10px 15px rgba(168, 85, 247, 0.3);
+                  }
+              </style>
+          </head>
+          <body>
+              <header>
+                  <h1>Web Arcade Hub</h1>
+                  <p>Choose a game to play instantly</p>
+              </header>
+              <main class="menu-container">
+          EOF
+
+          # Automatically loop through every HTML file in the games directory
+          for file in games/*.html; do
+              if [ -f "$file" ]; then
+                  filename=$(basename "$file")
+                  # Strip the .html extension and clean up hyphens for display text
+                  displayname=$(echo "$filename" | sed 's/\.html//g' | sed 's/-/ /g' | sed 's/_/ /g')
+                  
+                  echo "        <a href=\"./games/$filename\" class=\"play-btn\">$displayname</a>" >> index.html
+              fi
+          done
+
+          cat << 'EOF' >> index.html
+              </main>
+          </body>
+          </html>
+          EOF
+
+      - name: Commit and Push index.html changes
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@://github.com"
+          git add index.html
+          git diff --quiet && git diff --staged --quiet || (git commit -m "Auto-updated arcade menu" && git push)
