@@ -1,4 +1,4 @@
-p<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -26,7 +26,7 @@ p<!DOCTYPE html>
         h1 {
             font-size: 2.5rem;
             margin-bottom: 10px;
-            background: linear-gradient(to right, #a855f7, #ec4899);
+            background: linear-gradient(to right, #38bdf8, #a855f7, #ec4899);
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
         }
@@ -38,48 +38,55 @@ p<!DOCTYPE html>
         }
 
         .menu-container {
-            display: flex;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
             gap: 20px;
             width: 90%;
-            max-width: 600px;
+            max-width: 800px;
             justify-content: center;
-            flex-wrap: wrap;
         }
 
         .play-btn {
-            flex: 1;
-            min-width: 200px;
             text-align: center;
             text-decoration: none;
-            padding: 20px;
+            padding: 25px 20px;
             border-radius: 12px;
             font-size: 1.2rem;
             font-weight: bold;
             color: #ffffff;
             transition: transform 0.2s, box-shadow 0.2s, background-color 0.2s;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
         }
 
         .play-btn:hover {
-            transform: translateY(-3px);
+            transform: translateY(-4px);
         }
 
-        /* Puzzle Game Button Styling */
-        .btn-puzzle {
-            background-color: #a855f7;
-        }
+        .btn-puzzle { background-color: #a855f7; }
         .btn-puzzle:hover {
             background-color: #9333ea;
             box-shadow: 0 10px 15px rgba(168, 85, 247, 0.4);
         }
 
-        /* Frog Friends Button Styling */
-        .btn-frog {
-            background-color: #22c55e;
-        }
+        .btn-frog { background-color: #22c55e; }
         .btn-frog:hover {
             background-color: #16a34a;
             box-shadow: 0 10px 15px rgba(34, 197, 94, 0.4);
+        }
+
+        .btn-bloxd { background-color: #0284c7; }
+        .btn-bloxd:hover {
+            background-color: #0369a1;
+            box-shadow: 0 10px 15px rgba(2, 132, 199, 0.4);
+        }
+
+        .btn-icon {
+            font-size: 2rem;
         }
     </style>
 </head>
@@ -93,12 +100,20 @@ p<!DOCTYPE html>
     <main class="menu-container">
         <!-- Button 1: Puzzle Game -->
         <a href="./games/puzzle.html" class="play-btn btn-puzzle">
-            Play Halftone Puzzle
+            <span class="btn-icon">🧩</span>
+            Halftone Puzzle
         </a>
 
         <!-- Button 2: Frog Friends -->
         <a href="./games/frogfriends.html" class="play-btn btn-frog">
-            Play Frog Friends 🐸
+            <span class="btn-icon">🐸</span>
+            Frog Friends
+        </a>
+
+        <!-- Button 3: Bloxd.io -->
+        <a href="./games/bloxd.html" class="play-btn btn-bloxd">
+            <span class="btn-icon">🧱</span>
+            Bloxd.io Worlds
         </a>
     </main>
 
