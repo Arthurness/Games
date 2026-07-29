@@ -39,10 +39,10 @@
 
         .menu-container {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             gap: 20px;
             width: 90%;
-            max-width: 800px;
+            max-width: 900px;
             justify-content: center;
         }
 
@@ -67,22 +67,32 @@
             transform: translateY(-4px);
         }
 
-        .btn-puzzle { background-color: #a855f7; }
-        .btn-puzzle:hover {
+        /* Pong Button Styling (Renamed from Puzzle) */
+        .btn-pong { background-color: #a855f7; }
+        .btn-pong:hover {
             background-color: #9333ea;
             box-shadow: 0 10px 15px rgba(168, 85, 247, 0.4);
         }
 
+        /* Frog Friends Button Styling */
         .btn-frog { background-color: #22c55e; }
         .btn-frog:hover {
             background-color: #16a34a;
             box-shadow: 0 10px 15px rgba(34, 197, 94, 0.4);
         }
 
+        /* Bloxd Button Styling */
         .btn-bloxd { background-color: #0284c7; }
         .btn-bloxd:hover {
             background-color: #0369a1;
             box-shadow: 0 10px 15px rgba(2, 132, 199, 0.4);
+        }
+
+        /* Tiny Fishing Button Styling */
+        .btn-fishing { background-color: #f59e0b; }
+        .btn-fishing:hover {
+            background-color: #d97706;
+            box-shadow: 0 10px 15px rgba(245, 158, 11, 0.4);
         }
 
         .btn-icon {
@@ -98,10 +108,10 @@
     </header>
 
     <main class="menu-container">
-        <!-- Button 1: Puzzle Game -->
-        <a href="./games/puzzle.html" class="play-btn btn-puzzle">
-            <span class="btn-icon">🧩</span>
-            Halftone Puzzle
+        <!-- Button 1: Pong (Points to puzzle.html) -->
+        <a href="./games/puzzle.html" class="play-btn btn-pong">
+            <span class="btn-icon">🏓</span>
+            Pong
         </a>
 
         <!-- Button 2: Frog Friends -->
@@ -110,10 +120,16 @@
             Frog Friends
         </a>
 
-        <!-- Button 3: Bloxd.io -->
+        <!-- Button 3: Bloxd.io Worlds -->
         <a href="./games/bloxd.html" class="play-btn btn-bloxd">
             <span class="btn-icon">🧱</span>
             Bloxd.io Worlds
+        </a>
+
+        <!-- Button 4: Tiny Fishing -->
+        <a href="./games/fish.html" class="play-btn btn-fishing">
+            <span class="btn-icon">🎣</span>
+            Tiny Fishing
         </a>
     </main>
 
