@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My GitHub Arcade</title>
+    <title>My Automated GitHub Arcade</title>
     <style>
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -20,7 +20,7 @@
 
         header {
             text-align: center;
-            margin: 40px 0 20px 0;
+            margin-bottom: 40px;
         }
 
         h1 {
@@ -42,8 +42,7 @@
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             gap: 20px;
             width: 90%;
-            max-width: 1000px;
-            padding: 20px 0;
+            max-width: 900px;
             justify-content: center;
         }
 
@@ -55,52 +54,32 @@
             font-size: 1.2rem;
             font-weight: bold;
             color: #ffffff;
-            transition: transform 0.2s, box-shadow 0.2s, background-color 0.2s;
+            background-color: #1e293b;
+            border: 2px solid #334155;
+            transition: transform 0.2s, box-shadow 0.2s, border-color 0.2s, background-color 0.2s;
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.2);
             display: flex;
             flex-direction: column;
             align-items: center;
             justify-content: center;
             gap: 8px;
+            text-transform: capitalize;
         }
 
         .play-btn:hover {
             transform: translateY(-4px);
-        }
-
-        /* Game Button Colors */
-        .btn-pong { background-color: #a855f7; }
-        .btn-pong:hover {
-            background-color: #9333ea;
-            box-shadow: 0 10px 15px rgba(168, 85, 247, 0.4);
-        }
-
-        .btn-frog { background-color: #22c55e; }
-        .btn-frog:hover {
-            background-color: #16a34a;
-            box-shadow: 0 10px 15px rgba(34, 197, 94, 0.4);
-        }
-
-        .btn-bloxd { background-color: #0284c7; }
-        .btn-bloxd:hover {
-            background-color: #0369a1;
-            box-shadow: 0 10px 15px rgba(2, 132, 199, 0.4);
-        }
-
-        .btn-fishing { background-color: #f59e0b; }
-        .btn-fishing:hover {
-            background-color: #d97706;
-            box-shadow: 0 10px 15px rgba(245, 158, 11, 0.4);
-        }
-
-        .btn-minecraft { background-color: #15803d; }
-        .btn-minecraft:hover {
-            background-color: #166534;
-            box-shadow: 0 10px 15px rgba(21, 128, 61, 0.4);
+            border-color: #a855f7;
+            background-color: #2e3b52;
+            box-shadow: 0 10px 15px rgba(168, 85, 247, 0.3);
         }
 
         .btn-icon {
             font-size: 2rem;
+        }
+
+        .loading {
+            color: #64748b;
+            font-style: italic;
         }
     </style>
 </head>
@@ -111,37 +90,77 @@
         <p>Choose a game to play instantly</p>
     </header>
 
-    <main class="menu-container">
-        <!-- Button 1: Pong -->
-        <a href="./games/puzzle.html" class="play-btn btn-pong">
-            <span class="btn-icon">🏓</span>
-            Pong
-        </a>
-
-        <!-- Button 2: Frog Friends -->
-        <a href="./games/frogfriends.html" class="play-btn btn-frog">
-            <span class="btn-icon">🐸</span>
-            Frog Friends
-        </a>
-
-        <!-- Button 3: Bloxd.io Worlds -->
-        <a href="./games/bloxd.html" class="play-btn btn-bloxd">
-            <span class="btn-icon">🧱</span>
-            Bloxd.io Worlds
-        </a>
-
-        <!-- Button 4: Tiny Fishing -->
-        <a href="./games/fish.html" class="play-btn btn-fishing">
-            <span class="btn-icon">🎣</span>
-            Tiny Fishing
-        </a>
-
-        <!-- Button 5: Minecraft (Eaglercraft) -->
-        <a href="./games/eaglercraft.html" class="play-btn btn-minecraft">
-            <span class="btn-icon">🟩</span>
-            Minecraft
-        </a>
+    <main class="menu-container" id="arcade-menu">
+        <p class="loading">Scanning for available arcade titles...</p>
     </main>
+
+    <script>
+        // ==========================================
+        // 🛠️ CONFIGURATION - CHANGE THESE LINES!
+        // ==========================================
+        const GITHUB_USERNAME = "Arthurness"; 
+        const REPO_NAME = "Games";
+        // ==========================================
+
+        // Map game filenames to decorative visual emojis
+        const emojiMap = {
+            "puzzle": "🏓", // Your puzzle file renamed to Pong in dashboard
+            "frogfriends": "🐸",
+            "bloxd": "🧱",
+            "fish": "🎣",
+            "eaglercraft": "🟩"
+        };
+
+        async function loadArcadeGames() {
+            const menu = document.getElementById('arcade-menu');
+            // Fetch content metadata directory via Public GitHub Repository API
+            const apiURL = `https://github.com{GITHUB_USERNAME}/${REPO_NAME}/contents/games`;
+
+            try {
+                const response = await fetch(apiURL);
+                if (!response.ok) throw new Error("Could not access files");
+                
+                const files = await response.json();
+                
+                // Empty the placeholder text
+                menu.innerHTML = "";
+
+                // Loop over everything found inside /games folder
+                files.forEach(file => {
+                    // Only process standard HTML files
+                    if (file.name.endsWith('.html')) {
+                        const filenameClean = file.name.replace('.html', '');
+                        
+                        // Human-friendly title transformation (e.g. frogfriends -> frog friends)
+                        let displayName = filenameClean.replace(/[-_]/g, ' ');
+                        if (displayName.toLowerCase() === "puzzle") displayName = "Pong"; // Handle custom title override
+
+                        // Look up mapped icon or default to standard gamepad emoji
+                        const icon = emojiMap[filenameClean] || "🎮";
+
+                        // Create custom play link component
+                        const card = document.createElement('a');
+                        card.href = `./games/${file.name}`;
+                        card.className = "play-btn";
+                        card.innerHTML = `<span class="btn-icon">${icon}</span> ${displayName}`;
+                        
+                        menu.appendChild(card);
+                    }
+                });
+
+                if(menu.innerHTML === "") {
+                    menu.innerHTML = "<p class='loading'>No HTML files found in games/ directory.</p>";
+                }
+
+            } catch (error) {
+                console.error(error);
+                menu.innerHTML = "<p class='loading' style='color:#ef4444;'>Failed to auto-detect games. Double-check username/repo configuration configurations inside code variables.</p>";
+            }
+        }
+
+        // Trigger scan once DOM container is initialized
+        document.addEventListener('DOMContentLoaded', loadArcadeGames);
+    </script>
 
 </body>
 </html>
