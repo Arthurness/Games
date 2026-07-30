@@ -1,0 +1,34 @@
+name: Generate Games List
+
+on:
+  push:
+    branches:
+      - main  # Change to master if your default branch is master
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Scan games folder and build JSON array
+        run: |
+          if [ -d "./games" ]; then
+            # Finds all .html files in the games folder, extracts the filenames, and formats them into a JSON array
+            cd games
+            echo "Scanning HTML files..."
+            find . -maxdepth 1 -name "*.html" -printf '"%P",\n' | sed '$ s/,$//' | tr -d '\n' | sed 's/^/[/' | sed 's/$/]/' > ../games-list.json
+            cd ..
+          else
+            echo "[]" > games-list.json
+          fi
+
+      - name: Commit and push changes
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "Automated update: games-list.json"
+          file_pattern: 'games-list.json'
